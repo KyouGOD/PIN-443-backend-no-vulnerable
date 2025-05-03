@@ -1,0 +1,32 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p ${{ secrets.SSH_PORT }} ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sync project files (with rsync)
+        run: |
+          rsync -avz --exclude '.git' --exclude '__pycache__' --exclude '*.pyc' ./ root@${{ secrets.SSH_HOST }}:~/pin443-backend/
+
+      - name: Build Docker image on server
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} root@${{ secrets.SSH_HOST }} "cd ~/pin443-backend && docker build -t pin443-backend:latest ."
+
+      - name: Start new container
+        run: |
+          ssh -p ${{ secrets.SSH_PORT }} root@${{ secrets.SSH_HOST }} "cd ~/pin443-backend && docker compose down && docker compose up -d"
